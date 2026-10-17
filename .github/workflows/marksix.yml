@@ -1,0 +1,47 @@
+name: marksix
+
+on:
+  schedule:
+    # Times are UTC. HKT = UTC+8.
+    - cron: "47 12 * * *"   # 20:47 HKT: watch tonight's draw (exits at once on non-draw days)
+    - cron: "17 13 * * *"   # 21:17 HKT: backup in case the first run is delayed or dropped
+    - cron: "7 1 * * *"     # 09:07 HKT: daily refresh of the next draw's info
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: marksix
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch results
+        run: |
+          if [ "${{ github.event.schedule }}" = "7 1 * * *" ]; then
+            python3 scripts/fetch.py
+          else
+            python3 scripts/fetch.py --watch
+          fi
+
+      - name: Commit and purge CDN cache
+        run: |
+          git add data
+          if git diff --cached --quiet; then
+            echo "no changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Mark Six data"
+          for i in 1 2 3 4; do git push && break || { sleep $((i * 3)); git pull --rebase; }; done
+          for f in current history; do
+            curl -fsS "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/data/$f.json" || true
+            echo
+          done
