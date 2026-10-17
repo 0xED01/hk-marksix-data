@@ -7,6 +7,11 @@ on:
     - cron: "17 13 * * *"   # 21:17 HKT: backup in case the first run is delayed or dropped
     - cron: "7 1 * * *"     # 09:07 HKT: daily refresh of the next draw's info
   workflow_dispatch:
+    inputs:
+      watch:
+        description: "Keep polling until tonight's result is out"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -24,7 +29,8 @@ jobs:
 
       - name: Fetch results
         run: |
-          if [ "${{ github.event.schedule }}" = "7 1 * * *" ]; then
+          if [ "${{ github.event.schedule }}" = "7 1 * * *" ] || \
+             { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.watch }}" != "true" ]; }; then
             python3 scripts/fetch.py
           else
             python3 scripts/fetch.py --watch
