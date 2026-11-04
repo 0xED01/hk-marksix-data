@@ -3,7 +3,6 @@ package com.baide.shangban;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -41,7 +40,7 @@ public class IslandOverlay {
 
     // 摄像头位置（屏幕像素）
     private int camCx, camTop, camH, camW;
-    private int sidePad, rowH, gap, leftWCollapsed, leftWExpanded;
+    private int sidePad, rowH, gap;
 
     IslandOverlay(Context c) {
         ctx = c;
@@ -85,20 +84,30 @@ public class IslandOverlay {
         } catch (Throwable ignored) { }
     }
 
+    private TextView big;
+
+    private TextView side(int color, float sp, int gravity) {
+        TextView t = new TextView(ctx);
+        t.setTextColor(color);
+        t.setTextSize(sp);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setFontFeatureSettings("tnum");
+        t.setGravity(gravity | Gravity.CENTER_VERTICAL);
+        t.setMaxLines(1);
+        // 文字太长时自动缩小，绝不超出胶囊
+        t.setAutoSizeTextTypeUniformWithConfiguration(8, (int) sp, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        return t;
+    }
+
     private void create() {
         detectCamera();
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         sidePad = dp(10);
-        rowH = Math.max(camH + dp(10), dp(30));
-        gap = camW + dp(12);
-
-        Paint p = new Paint();
-        p.setTypeface(Typeface.DEFAULT_BOLD);
-        p.setFontFeatureSettings("tnum");
-        p.setTextSize(13 * ctx.getResources().getDisplayMetrics().scaledDensity);
-        int rightW = (int) p.measureText("¥000.0000") + dp(2);
-        p.setTextSize(12 * ctx.getResources().getDisplayMetrics().scaledDensity);
-        leftWExpanded = (int) p.measureText("💰 上班中") + dp(4);
-        leftWCollapsed = dp(22);
+        rowH = Math.max(camH + dp(10), dp(32));
+        // 挖孔区域有时比摄像头本身大，留空宽度做个上限
+        int cam = Math.max(dp(16), Math.min(camW, dp(30)));
+        gap = cam + dp(10);
+        int sideW = dp(50);
 
         root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -111,33 +120,18 @@ public class IslandOverlay {
         row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-
-        left = new TextView(ctx);
-        left.setTextColor(Color.WHITE);
-        left.setTextSize(12);
-        left.setTypeface(Typeface.DEFAULT_BOLD);
-        left.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        left.setSingleLine(true);
-        row.addView(left, new LinearLayout.LayoutParams(leftWCollapsed, rowH));
-
-        View hole = new View(ctx); // 给摄像头留的空位
-        row.addView(hole, new LinearLayout.LayoutParams(gap, rowH));
-
-        right = new TextView(ctx);
-        right.setTextColor(0xFFFFB74D);
-        right.setTextSize(13);
-        right.setTypeface(Typeface.DEFAULT_BOLD);
-        right.setFontFeatureSettings("tnum");
-        right.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        right.setSingleLine(true);
-        row.addView(right, new LinearLayout.LayoutParams(rightW, rowH));
+        left = side(0xFFFFB74D, 13, Gravity.END);          // 左：今日已赚
+        row.addView(left, new LinearLayout.LayoutParams(sideW, rowH));
+        row.addView(new View(ctx), new LinearLayout.LayoutParams(gap, rowH)); // 摄像头
+        right = side(Color.WHITE, 13, Gravity.START);      // 右：倒计时
+        row.addView(right, new LinearLayout.LayoutParams(sideW, rowH));
         root.addView(row);
 
-        line2 = new TextView(ctx);
-        line2.setTextColor(Color.WHITE);
-        line2.setTextSize(13);
-        line2.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        big = side(0xFFFFB74D, 22, Gravity.CENTER_HORIZONTAL);
+        root.addView(big, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)));
+
+        line2 = side(Color.WHITE, 12, Gravity.CENTER_HORIZONTAL);
+        LinearLayout.LayoutParams l2 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18));
         l2.topMargin = dp(2);
         root.addView(line2, l2);
 
@@ -148,16 +142,19 @@ public class IslandOverlay {
         blp.bottomMargin = dp(12);
         root.addView(bar, blp);
 
+        int totalW = sidePad * 2 + sideW * 2 + gap;
         lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                totalW,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
+        // 左右对称，正中心对准摄像头
         lp.gravity = Gravity.TOP | Gravity.LEFT;
-        lp.y = Math.max(0, camTop + camH / 2 - rowH / 2);    // 垂直对准摄像头
+        lp.x = Math.max(0, camCx - totalW / 2);
+        lp.y = Math.max(0, camTop + camH / 2 - rowH / 2);
         if (Build.VERSION.SDK_INT >= 28) {
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
@@ -168,9 +165,7 @@ public class IslandOverlay {
             @Override public boolean onTouch(View v, MotionEvent e) {
                 if (e.getAction() == MotionEvent.ACTION_DOWN) {
                     downAt = System.currentTimeMillis();
-                    return true;
-                }
-                if (e.getAction() == MotionEvent.ACTION_UP) {
+                } else if (e.getAction() == MotionEvent.ACTION_UP) {
                     if (System.currentTimeMillis() - downAt > 500) {
                         ctx.startActivity(new Intent(ctx, MainActivity.class)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP));
@@ -178,7 +173,6 @@ public class IslandOverlay {
                         expanded = !expanded;
                         applyExpanded();
                     }
-                    return true;
                 }
                 return true;
             }
@@ -187,17 +181,11 @@ public class IslandOverlay {
     }
 
     private void applyExpanded() {
-        line2.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        bar.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        bg.setCornerRadius(expanded ? dp(22) : rowH / 2f);
-        int leftW = expanded ? leftWExpanded : leftWCollapsed;
-        left.getLayoutParams().width = leftW;
-        left.requestLayout();
-        // 让留空位的中心正好落在摄像头中心
-        lp.x = Math.max(0, camCx - (sidePad + leftW + gap / 2));
-        if (shown) {
-            try { wm.updateViewLayout(root, lp); } catch (Exception ignored) { }
-        }
+        int vis = expanded ? View.VISIBLE : View.GONE;
+        big.setVisibility(vis);
+        line2.setVisibility(vis);
+        bar.setVisibility(vis);
+        bg.setCornerRadius(expanded ? dp(20) : rowH / 2f);
     }
 
     void show() {
@@ -214,19 +202,21 @@ public class IslandOverlay {
 
     void update(SalaryCalc.Snapshot s) {
         if (!shown) return;
-        String icon;
+        left.setText(String.format(Locale.US, "¥%.2f", s.earnedToday));
+        String r;
         switch (s.state) {
-            case WORKING: icon = "💰"; break;
-            case LUNCH: icon = "🍱"; break;
-            case BEFORE_WORK: icon = "⏰"; break;
-            default: icon = "😴";
+            case WORKING: r = SalaryCalc.hmsShort(s.countdownSec); break;
+            case LUNCH: r = "午休"; break;
+            case BEFORE_WORK: r = "未上班"; break;
+            case OFF_WORK: r = "已下班"; break;
+            default: r = "休息";
         }
-        left.setText(expanded ? icon + " " + s.statusText : icon);
-        right.setText(String.format(Locale.US, "¥%.4f", s.earnedToday));
+        right.setText(r);
         if (expanded) {
+            big.setText(String.format(Locale.US, "¥%.4f", s.earnedToday));
             String cd = s.countdownSec >= 0
-                    ? s.countdownLabel.replace("还有", "") + " " + SalaryCalc.hmsShort(s.countdownSec) : "";
-            line2.setText(cd + String.format(Locale.US, "  ·  %.1f%%", s.progress * 100));
+                    ? s.countdownLabel.replace("距离", "距").replace("还有", "") + " " + SalaryCalc.hmsShort(s.countdownSec) : s.statusText;
+            line2.setText(cd);
             bar.setProgress((int) (s.progress * 1000));
         }
     }
