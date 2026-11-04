@@ -224,7 +224,7 @@ public class MainActivity extends Activity {
         island.addView(tv("灵动岛 / 原子岛显示", 16, 0xFF222222, true));
 
         swOverlay = new Switch(this);
-        swOverlay.setText("顶部悬浮灵动岛胶囊（点击展开，长按打开，可拖动）");
+        swOverlay.setText("顶部悬浮灵动岛（自动包住摄像头，点击展开，长按打开）");
         swOverlay.setTextSize(14);
         swOverlay.setOnCheckedChangeListener((v, on) -> {
             if (on && !canOverlay()) {
