@@ -12,8 +12,8 @@ public class Config {
     public int startMin = 8 * 60 + 30;   // 08:30
     public int endMin = 17 * 60 + 30;    // 17:30
     public boolean lunchEnabled = true;
-    public int lunchStartMin = 12 * 60;  // 12:00
-    public int lunchEndMin = 13 * 60;    // 13:00
+    public int lunchStartMin = 11 * 60 + 30;  // 11:30
+    public int lunchEndMin = 13 * 60 + 30;    // 13:30
     /** 周一..周日 是否上班（双休：周一至周五） */
     public boolean[] workdays = {true, true, true, true, true, false, false};
     public boolean islandOverlay = true;
@@ -34,6 +34,14 @@ public class Config {
         String wd = sp.getString("workdays", "1111100");
         for (int i = 0; i < 7 && i < wd.length(); i++) k.workdays[i] = wd.charAt(i) == '1';
         k.islandOverlay = sp.getBoolean("overlay", k.islandOverlay);
+        // 旧版本默认午休 12:00-13:00，升级为公司实际的 11:30-13:30
+        if (sp.getInt("cfgVer", 1) < 2) {
+            if (k.lunchStartMin == 12 * 60 && k.lunchEndMin == 13 * 60) {
+                k.lunchStartMin = 11 * 60 + 30;
+                k.lunchEndMin = 13 * 60 + 30;
+            }
+            sp.edit().putInt("cfgVer", 2).putInt("lunchStart", k.lunchStartMin).putInt("lunchEnd", k.lunchEndMin).apply();
+        }
         return k;
     }
 
